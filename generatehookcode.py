@@ -17,7 +17,7 @@ def getMethods(smaliFilePath):
     methods = []
     with open(smaliFilePath, "r") as f:
         for line in f.readlines():
-            if (line.find(".method ") != -1):
+            if (line.find(".method ") != -1 and line.find("abstract") == -1):
                 methods.append(line)
     return methods
 
@@ -106,7 +106,7 @@ def genDefClass(className):
     return genClassName + "Class"
 
 
-def genHookFunctionCode(genClassName, funName, argList, returnType):
+def genHookFunctionCode(genClassName, funName, argList, returnType, isOverload):
     argCode = ""
     overloadCode = ""
     LogCode = "\n"
@@ -126,7 +126,7 @@ def genHookFunctionCode(genClassName, funName, argList, returnType):
                 argString = standardType[argString]
         else:
             argString = argString.replace("/", ".")
-        overloadCode += "'" + argString + "'"
+        overloadCode += "\"" + argString + "\""
 
         aArg = "arg" + str(i)
         argCode += aArg
@@ -144,7 +144,10 @@ def genHookFunctionCode(genClassName, funName, argList, returnType):
         callCode = "\n\t\t\tvar ret = this.%s(%s);" % (funName, argCode)
         consoleLogReturnValue = "\t\t\tconsole.log('%s.%s [*] ret: ' + ret);\n" % (genClassName, funName)
         returnCode = "\t\t\treturn ret;\n"
-    code = "\t\t%s.%s.overload(%s).implementation = function (%s) { %s %s %s %s\t\t};" % (genClassName, funName, overloadCode, argCode, callCode, LogCode, consoleLogReturnValue, returnCode)
+    if (overloadCode == "" or isOverload == False):
+        code = "\t\t%s.%s.implementation = function (%s) { %s %s %s %s\t\t};" % (genClassName, funName, argCode, callCode, LogCode, consoleLogReturnValue, returnCode)
+    else:
+        code = "\t\t%s.%s.overload(%s).implementation = function (%s) { %s %s %s %s\t\t};" % (genClassName, funName, overloadCode, argCode, callCode, LogCode, consoleLogReturnValue, returnCode)
     print (code)
     pass
 
@@ -153,13 +156,28 @@ def genHookCode(filepath):
     className = getClassName(smaliPath)
     genClassName = genDefClass(className)
     methods = getMethods(smaliPath)
+    allFuntionNames = {}
+    for methodline in methods:
+        funName = getFunctionName(methodline)
+        if funName == "<init>" or funName == "<clinit>":
+            continue
+        if funName in allFuntionNames:
+            count = allFuntionNames[funName]
+            allFuntionNames[funName] = count + 1
+        else:
+            allFuntionNames[funName] = 1
+
     for methodline in methods:
         funName = getFunctionName(methodline)
         if funName == "<init>" or funName == "<clinit>":
             continue
         argList = getArgList(methodline)
         returnType = getReturnType(methodline)
-        genHookFunctionCode(genClassName, funName, argList, returnType)
+        
+        isOverload = False
+        if allFuntionNames[funName] >= 2:
+            isOverload = True
+        genHookFunctionCode(genClassName, funName, argList, returnType, isOverload)
 
 def main():
     for i in range(1, len(sys.argv)):
